@@ -4,10 +4,14 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-// Status codes
+// Return status codes
+#define EMPTY_ARGS -3
 #define EOF_REACHED -2
 #define ERROR -1
-#define SUCCESS 1
+
+// Control flow status codes
+#define RED 0
+#define GREEN 1
 
 // Magic numbers and stuff
 #define MAX_LINE 1024
@@ -27,7 +31,7 @@ void free_command(Command *cmd);
 
 int main(void)
 {
-  int status = SUCCESS;
+  int status = GREEN;
 
   Command cmd;
   cmd.args = malloc(MAX_LINE * sizeof(char *));
@@ -55,18 +59,18 @@ int main(void)
     {
     case EOF_REACHED:
       printf("EOF reached.\n");
-      status = EOF_REACHED;
+      status = RED;
       break;
     case ERROR:
       perror("Error reading input.");
-      status = ERROR;
+      status = RED;
       break;
     default:
-      // Do nothing
+      status = GREEN;
       break;
     }
 
-    if (status != SUCCESS)
+    if (status != GREEN)
     {
       // Early exit
       break;
@@ -78,16 +82,35 @@ int main(void)
     cmd.arg_count = 0;
 
     // Fill the Command structure
-    status = parse_line(line, &cmd);
+    int parse_status = parse_line(line, &cmd);
 
-    // Execute the Command, fulfilling our duty as a shell!
-    if (status == SUCCESS)
+    switch (parse_status)
     {
-      status = execute_command(&cmd);
-    }
-    else
-    {
-      fprintf(stderr, "Error parsing input line.\n");
+    case GREEN:
+      // Execute the Command, fulfilling our duty as a shell!
+      int execute_status = execute_command(&cmd);
+      if (execute_status == ERROR)
+      {
+        fprintf(stderr, "Error executing command: %s\n", cmd.name);
+        status = RED;
+      }
+      else if (execute_status == RED)
+      {
+        status = RED;
+      }
+      else
+      {
+        status = GREEN;
+      }
+      break;
+    case ERROR:
+      // Print an error message and continue the loop
+      fprintf(stderr, "Error parsing command.\n");
+    case EMPTY_ARGS:
+      // No command entered, just continue the loop
+    default:
+      status = GREEN;
+      break;
     }
   }
 
@@ -185,7 +208,7 @@ int parse_line(char *line, Command *cmd)
   // Check for no arguments
   if (position == 0)
   {
-    return ERROR;
+    return EMPTY_ARGS;
   }
 
   // Copy the command name and argument count
@@ -193,7 +216,7 @@ int parse_line(char *line, Command *cmd)
   cmd->name[MAX_LINE - 1] = '\0';
   cmd->arg_count = position;
 
-  return SUCCESS;
+  return GREEN;
 }
 
 /**
@@ -226,7 +249,7 @@ int execute_command(Command *cmd)
   pid_t pid;
 
   if (strcmp(cmd->name, "exit") == 0)
-    return 0; // Exit our shell, as requested
+    return RED; // Exit our shell, as requested
 
   // Create a child process to execute the given command
   pid = fork();
@@ -258,5 +281,5 @@ int execute_command(Command *cmd)
     }
   } while (!WIFEXITED(status) && !WIFSIGNALED(status));
 
-  return SUCCESS;
+  return GREEN;
 }
