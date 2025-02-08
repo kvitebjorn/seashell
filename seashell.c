@@ -38,22 +38,8 @@ int main(void)
   sa.sa_handler = SIG_IGN;
   sigaction(SIGINT, &sa, NULL);
 
-  // Allocate memory for command structure
-  Command cmd;
-  cmd.args = malloc(MAX_ARGS * sizeof(char *));
-  if (!cmd.args)
-  {
-    perror("Error allocating memory for command args.");
-    exit(ERROR);
-  }
-
-  cmd.name = malloc(MAX_LINE * sizeof(char));
-  if (!cmd.name)
-  {
-    perror("Error allocating memory for command name.");
-    free(cmd.args);
-    exit(ERROR);
-  }
+  // Initialize command structure
+  Command cmd = {NULL, NULL, 0};
 
   while (status)
   {
@@ -72,9 +58,25 @@ int main(void)
       continue;
     }
 
-    // Reset the command, just in case! Data integrity and all that...
-    memset(cmd.args, 0, MAX_ARGS * sizeof(char *));
-    memset(cmd.name, 0, MAX_LINE);
+    // Free previously allocated command data
+    free_command(&cmd);
+
+    // Allocate fresh memory for command arguments
+    cmd.args = malloc(MAX_ARGS * sizeof(char *));
+    if (!cmd.args)
+    {
+      perror("Error allocating memory for command args.");
+      exit(ERROR);
+    }
+
+    cmd.name = malloc(MAX_LINE * sizeof(char));
+    if (!cmd.name)
+    {
+      perror("Error allocating memory for command name.");
+      free(cmd.args);
+      exit(ERROR);
+    }
+
     cmd.arg_count = 0;
 
     // Parse the input into the Command structure
@@ -119,6 +121,8 @@ ssize_t read_line(char *line)
     if (len == MAX_LINE - 1 && line[len - 1] != '\n')
     {
       fprintf(stderr, "Input too long!\n");
+
+      // Clear the input buffer to prevent corruption
       int ch;
       while ((ch = getchar()) != '\n' && ch != EOF)
         ;
@@ -181,6 +185,7 @@ void free_command(Command *cmd)
 {
   if (!cmd)
     return;
+
   for (int i = 0; i < cmd->arg_count; i++)
   {
     free(cmd->args[i]);
